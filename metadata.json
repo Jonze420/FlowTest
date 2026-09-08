@@ -1,0 +1,6 @@
+{
+  "name": "StompFlow",
+  "description": "Guitar multi-effects processor, 16-step rhythm machine, 4-track looper, and chromatic tuner studio.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
