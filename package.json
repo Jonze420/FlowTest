@@ -1,7 +1,7 @@
 {
   "name": "stompflow",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.1",
   "scripts": {
     "dev": "echo 'StompFlow Android Studio ready'",
     "build": "echo 'StompFlow build succeeded'"

@@ -173,6 +173,30 @@ fun MainApp(
                     },
                     onResetAll = {
                         viewModel.resetLooperAll()
+                    },
+                    onSetTrackDuration = { trackId, durationSec ->
+                        viewModel.setTrackDuration(trackId, durationSec)
+                    },
+                    onSetTrackLoopRegion = { trackId, startTrim, endTrim ->
+                        viewModel.setTrackLoopRegion(trackId, startTrim, endTrim)
+                    },
+                    onResetTrackDuration = { trackId ->
+                        viewModel.resetTrackDuration(trackId)
+                    },
+                    onDoubleTrackDuration = { trackId ->
+                        viewModel.doubleTrackDuration(trackId)
+                    },
+                    onHalveTrackDuration = { trackId ->
+                        viewModel.halveTrackDuration(trackId)
+                    },
+                    onSyncAllTracksToMaster = { trackId ->
+                        viewModel.syncAllTracksToMasterDuration(trackId)
+                    },
+                    onUndoTrack = { trackId ->
+                        viewModel.undoLoopTrack(trackId)
+                    },
+                    onRedoTrack = { trackId ->
+                        viewModel.redoLoopTrack(trackId)
                     }
                 )
                 StudioTab.SESSIONS -> SessionsScreen(

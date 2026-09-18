@@ -18,4 +18,7 @@
     <string name="status_recording">Recording</string>
     <string name="status_playing">Playing</string>
     <string name="status_listening">Listening</string>
+    <string name="btn_undo">Undo</string>
+    <string name="btn_redo">Redo</string>
+    <string name="btn_overdub">Overdub</string>
 </resources>

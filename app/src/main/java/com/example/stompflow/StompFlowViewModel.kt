@@ -142,6 +142,42 @@ class StompFlowViewModel(application: Application) : AndroidViewModel(applicatio
         looperEngine.clearTrack(trackId)
     }
 
+    fun undoLoopTrack(trackId: Int) {
+        looperEngine.undoTrack(trackId)
+    }
+
+    fun redoLoopTrack(trackId: Int) {
+        looperEngine.redoTrack(trackId)
+    }
+
+    fun setTrackDuration(trackId: Int, durationSeconds: Float) {
+        looperEngine.setTrackDuration(trackId, durationSeconds)
+    }
+
+    fun setTrackLoopRegion(trackId: Int, startTrimSeconds: Float, endTrimSeconds: Float) {
+        looperEngine.setTrackLoopRegion(trackId, startTrimSeconds, endTrimSeconds)
+    }
+
+    fun resetTrackDuration(trackId: Int) {
+        looperEngine.resetTrackDuration(trackId)
+    }
+
+    fun doubleTrackDuration(trackId: Int) {
+        looperEngine.doubleTrackDuration(trackId)
+    }
+
+    fun halveTrackDuration(trackId: Int) {
+        looperEngine.halveTrackDuration(trackId)
+    }
+
+    fun syncAllTracksToMasterDuration(trackId: Int = 1) {
+        val masterTrack = loopTracks.value.firstOrNull { it.id == trackId && it.hasAudio }
+            ?: loopTracks.value.firstOrNull { it.hasAudio }
+        if (masterTrack != null) {
+            looperEngine.syncAllTracksToDuration(masterTrack.durationSeconds)
+        }
+    }
+
     fun toggleLooperGlobalPlay() {
         if (looperEngine.isGlobalPlaying.value) {
             looperEngine.stopAll()
