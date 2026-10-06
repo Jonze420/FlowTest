@@ -3,6 +3,8 @@ package com.example.stompflow
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.stompflow.audio.AudioDeviceManager
+import com.example.stompflow.audio.AudioSetupState
 import com.example.stompflow.audio.GuitarDspEngine
 import com.example.stompflow.audio.LooperEngine
 import com.example.stompflow.audio.RhythmEngine
@@ -29,6 +31,7 @@ class StompFlowViewModel(application: Application) : AndroidViewModel(applicatio
     val looperEngine = LooperEngine()
     val tunerEngine = TunerEngine()
     val guitarDspEngine = GuitarDspEngine()
+    val audioDeviceManager = AudioDeviceManager(application)
 
     private val _selectedTab = MutableStateFlow(StudioTab.PATCHES)
     val selectedTab: StateFlow<StudioTab> = _selectedTab.asStateFlow()
@@ -53,6 +56,7 @@ class StompFlowViewModel(application: Application) : AndroidViewModel(applicatio
     val isLooperPlaying: StateFlow<Boolean> = looperEngine.isGlobalPlaying
     val isAuditionPlaying: StateFlow<Boolean> = guitarDspEngine.isPlayingPreview
     val tunerState: StateFlow<TunerState> = tunerEngine.tunerState
+    val audioSetupState: StateFlow<AudioSetupState> = audioDeviceManager.setupState
 
     init {
         val db = StompFlowDatabase.getDatabase(application)
@@ -65,6 +69,7 @@ class StompFlowViewModel(application: Application) : AndroidViewModel(applicatio
             SharingStarted.WhileSubscribed(5000),
             emptyList()
         )
+        audioDeviceManager.startTelemetry(viewModelScope)
     }
 
     fun selectTab(tab: StudioTab) {
@@ -257,8 +262,49 @@ class StompFlowViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun selectInputDevice(deviceId: String) {
+        audioDeviceManager.selectInputDevice(deviceId)
+    }
+
+    fun selectOutputDevice(deviceId: String) {
+        audioDeviceManager.selectOutputDevice(deviceId)
+    }
+
+    fun selectDspEngine(engineId: String) {
+        audioDeviceManager.selectDspEngine(engineId)
+    }
+
+    fun toggleAudioConnection() {
+        audioDeviceManager.toggleAudioConnection()
+    }
+
+    fun setEchoCancellation(enabled: Boolean) {
+        audioDeviceManager.setEchoCancellation(enabled)
+    }
+
+    fun setNoiseSuppression(enabled: Boolean) {
+        audioDeviceManager.setNoiseSuppression(enabled)
+    }
+
+    fun setAutoGainControl(enabled: Boolean) {
+        audioDeviceManager.setAutoGainControl(enabled)
+    }
+
+    fun setInputGainDb(gainDb: Float) {
+        audioDeviceManager.setInputGainDb(gainDb)
+    }
+
+    fun setOutputVolume(volume: Float) {
+        audioDeviceManager.setOutputVolume(volume)
+    }
+
+    fun setDirectMonitoring(enabled: Boolean) {
+        audioDeviceManager.setDirectMonitoring(enabled)
+    }
+
     override fun onCleared() {
         super.onCleared()
+        audioDeviceManager.stopTelemetry()
         rhythmEngine.release()
         looperEngine.release()
         tunerEngine.stopListening()

@@ -1,0 +1,227 @@
+name: Production Release & Deployment
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g., v1.2.1). Leave empty to use current commit.'
+        required: false
+        default: ''
+      release_title:
+        description: 'Release title. Leave empty to use tag name.'
+        required: false
+        default: ''
+      create_github_release:
+        description: 'Create a GitHub Release with assets'
+        required: true
+        type: boolean
+        default: true
+      is_draft:
+        description: 'Mark GitHub Release as draft'
+        required: false
+        type: boolean
+        default: false
+      is_prerelease:
+        description: 'Mark GitHub Release as prerelease'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  packages: read
+
+concurrency:
+  group: deploy-production-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Run Tests & Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Run Unit Tests
+        run: gradle testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
+
+  build-production:
+    name: Build & Package Production Release
+    needs: verify
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.version_info.outputs.tag_name }}
+      version_name: ${{ steps.version_info.outputs.version_name }}
+      apk_path: ${{ steps.export_artifacts.outputs.apk_path }}
+      aab_path: ${{ steps.export_artifacts.outputs.aab_path }}
+      has_signed_assets: ${{ steps.sign_check.outputs.has_signed_assets }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Determine Version & Tag
+        id: version_info
+        run: |
+          if [ -n "${{ inputs.release_tag }}" ]; then
+            TAG="${{ inputs.release_tag }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v1.2.1-build-${{ github.run_number }}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag_name=$TAG" >> $GITHUB_OUTPUT
+          echo "version_name=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building production artifacts for tag $TAG (version $VERSION)"
+
+      - name: Build Release APK and App Bundle (AAB)
+        run: |
+          echo "Building production release APK..."
+          gradle :app:assembleRelease --no-daemon --stacktrace
+          echo "Building production release Android App Bundle (AAB)..."
+          gradle :app:bundleRelease --no-daemon --stacktrace
+
+      - name: Check for Signing Secrets
+        id: sign_check
+        run: |
+          if [ -n "${{ secrets.SIGNING_KEY }}" ] || [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "has_signed_assets=true" >> $GITHUB_OUTPUT
+            echo "Release keystore secret detected. Signing will be performed."
+          else
+            echo "has_signed_assets=false" >> $GITHUB_OUTPUT
+            echo "::warning::No SIGNING_KEY / KEYSTORE_BASE64 secret provided. Artifacts will remain unsigned. See .github/DEPLOYMENT.md to configure release signing keys."
+          fi
+
+      - name: Sign Android Release APK & AAB
+        if: steps.sign_check.outputs.has_signed_assets == 'true'
+        uses: r0adkll/sign-android-release@v1
+        id: sign_app
+        with:
+          releaseDirectory: app/build/outputs/apk/release
+          signingKey: ${{ secrets.SIGNING_KEY || secrets.KEYSTORE_BASE64 }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          alias: ${{ secrets.ALIAS }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: '35.0.0'
+
+      - name: Sign Android App Bundle (AAB)
+        if: steps.sign_check.outputs.has_signed_assets == 'true'
+        uses: r0adkll/sign-android-release@v1
+        id: sign_bundle
+        with:
+          releaseDirectory: app/build/outputs/bundle/release
+          signingKey: ${{ secrets.SIGNING_KEY || secrets.KEYSTORE_BASE64 }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          alias: ${{ secrets.ALIAS }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: '35.0.0'
+
+      - name: Organize & Rename Release Artifacts
+        id: export_artifacts
+        run: |
+          mkdir -p release-dist
+          TAG="${{ steps.version_info.outputs.tag_name }}"
+          
+          # Find release APK (prefer signed if present)
+          if [ -f "${{ steps.sign_app.outputs.signedReleaseFile }}" ]; then
+            cp "${{ steps.sign_app.outputs.signedReleaseFile }}" "release-dist/StompFlow-${TAG}-signed.apk"
+            echo "apk_path=release-dist/StompFlow-${TAG}-signed.apk" >> $GITHUB_OUTPUT
+          elif ls app/build/outputs/apk/release/*.apk 1> /dev/null 2>&1; then
+            APK_SRC=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
+            cp "$APK_SRC" "release-dist/StompFlow-${TAG}-unsigned.apk"
+            echo "apk_path=release-dist/StompFlow-${TAG}-unsigned.apk" >> $GITHUB_OUTPUT
+          fi
+
+          # Find release AAB (prefer signed if present)
+          if [ -f "${{ steps.sign_bundle.outputs.signedReleaseFile }}" ]; then
+            cp "${{ steps.sign_bundle.outputs.signedReleaseFile }}" "release-dist/StompFlow-${TAG}-signed.aab"
+            echo "aab_path=release-dist/StompFlow-${TAG}-signed.aab" >> $GITHUB_OUTPUT
+          elif ls app/build/outputs/bundle/release/*.aab 1> /dev/null 2>&1; then
+            AAB_SRC=$(ls app/build/outputs/bundle/release/*.aab | head -n 1)
+            cp "$AAB_SRC" "release-dist/StompFlow-${TAG}-unsigned.aab"
+            echo "aab_path=release-dist/StompFlow-${TAG}-unsigned.aab" >> $GITHUB_OUTPUT
+          fi
+
+          # Copy ProGuard / R8 mapping file if available
+          if [ -f "app/build/outputs/mapping/release/mapping.txt" ]; then
+            cp "app/build/outputs/mapping/release/mapping.txt" "release-dist/mapping-${TAG}.txt"
+          fi
+
+          # Generate SHA-256 Checksums for integrity verification
+          cd release-dist
+          sha256sum * > SHA256SUMS.txt 2>/dev/null || true
+          cd ..
+          ls -la release-dist
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stompflow-production-apk
+          path: release-dist/*.apk
+          retention-days: 30
+
+      - name: Upload Release AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stompflow-production-aab
+          path: release-dist/*.aab
+          retention-days: 30
+
+      - name: Upload Distribution Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: stompflow-release-distribution
+          path: release-dist/
+          retention-days: 60
+
+      - name: Create or Update GitHub Release
+        if: ${{ inputs.create_github_release != false && (github.event_name == 'push' || inputs.create_github_release == true) }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version_info.outputs.tag_name }}
+          name: ${{ inputs.release_title || steps.version_info.outputs.tag_name }}
+          draft: ${{ inputs.is_draft || false }}
+          prerelease: ${{ inputs.is_prerelease || false }}
+          generate_release_notes: true
+          files: |
+            release-dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,130 @@
+name: Publish to Google Play Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Google Play track to publish to'
+        required: true
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+        default: 'internal'
+      status:
+        description: 'Release rollout status'
+        required: true
+        type: choice
+        options:
+          - completed
+          - draft
+          - inProgress
+          - halted
+        default: 'completed'
+      user_fraction:
+        description: 'Rollout fraction (for inProgress status, e.g., 0.1 for 10% rollout, 1.0 for 100%)'
+        required: false
+        default: '1.0'
+      release_name:
+        description: 'Release name in Google Play Console (optional, defaults to version name)'
+        required: false
+        default: ''
+      whats_new_text:
+        description: 'Short release note text for what is new in this release'
+        required: false
+        default: 'Performance enhancements, undo/redo looper engine support, and audio engine stability updates.'
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: publish-google-play-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build, Sign & Publish to Google Play
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Validate Google Play Credentials Secret
+        id: creds_check
+        run: |
+          if [ -n "${{ secrets.PLAY_CONFIG_JSON }}" ] || [ -n "${{ secrets.SERVICE_ACCOUNT_JSON }}" ]; then
+            echo "has_play_creds=true" >> $GITHUB_OUTPUT
+            echo "Google Play service account secret is present."
+          else
+            echo "has_play_creds=false" >> $GITHUB_OUTPUT
+            echo "::error::Missing PLAY_CONFIG_JSON or SERVICE_ACCOUNT_JSON secret in repository settings."
+            echo "Please configure the Google Play service account JSON secret as documented in .github/DEPLOYMENT.md."
+            exit 1
+          fi
+
+      - name: Build Release Android App Bundle (AAB)
+        run: |
+          echo "Building production AAB for Google Play submission..."
+          gradle :app:bundleRelease --no-daemon --stacktrace
+
+      - name: Sign Android App Bundle
+        uses: r0adkll/sign-android-release@v1
+        id: sign_bundle
+        with:
+          releaseDirectory: app/build/outputs/bundle/release
+          signingKey: ${{ secrets.SIGNING_KEY || secrets.KEYSTORE_BASE64 }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          alias: ${{ secrets.ALIAS }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: '35.0.0'
+
+      - name: Locate Bundle File
+        id: bundle_location
+        run: |
+          if [ -f "${{ steps.sign_bundle.outputs.signedReleaseFile }}" ]; then
+            BUNDLE_PATH="${{ steps.sign_bundle.outputs.signedReleaseFile }}"
+          else
+            BUNDLE_PATH=$(ls app/build/outputs/bundle/release/*.aab | head -n 1)
+          fi
+          echo "bundle_path=$BUNDLE_PATH" >> $GITHUB_OUTPUT
+          echo "Using bundle file: $BUNDLE_PATH"
+
+      - name: Prepare Release Notes Directory
+        run: |
+          mkdir -p distribution/whatsnew
+          echo "${{ inputs.whats_new_text }}" > distribution/whatsnew/whatsnew-en-US
+
+      - name: Deploy to Google Play Console
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_CONFIG_JSON || secrets.SERVICE_ACCOUNT_JSON }}
+          packageName: com.aistudio.stompflow.mfkpzr
+          releaseFiles: ${{ steps.bundle_location.outputs.bundle_path }}
+          track: ${{ inputs.track }}
+          status: ${{ inputs.status }}
+          userFraction: ${{ inputs.user_fraction }}
+          whatsNewDirectory: distribution/whatsnew
+          mappingFile: app/build/outputs/mapping/release/mapping.txt
+          inAppUpdatePriority: 2
+
+      - name: Upload Published AAB as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-play-published-aab-${{ inputs.track }}
+          path: ${{ steps.bundle_location.outputs.bundle_path }}
+          retention-days: 30

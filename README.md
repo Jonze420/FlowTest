@@ -37,3 +37,21 @@ StompFlow Studio is a guitar multi-effects processor, 16-step rhythm drum sequen
 - **Local Database:** Android Room with KSP
 - **Audio Processing:** Low-latency `AudioTrack` real-time synthesis & `AudioRecord` PCM capture
 - **Build System:** Gradle Kotlin DSL (`build.gradle.kts`, `libs.versions.toml`)
+- **CI/CD & Deployment:** GitHub Actions (`deploy-production.yml`, `publish-google-play.yml`, `ci.yml`)
+
+## CI/CD, Deployment & Releases
+
+StompFlow includes automated GitHub Actions pipelines for continuous integration, production releases, and Google Play Store publication:
+
+- **Production Deployment Workflow (`.github/workflows/deploy-production.yml`)**: Builds release APK and AAB, signs with release keys, calculates SHA-256 checksums, and attaches assets to GitHub Releases.
+- **Google Play Store Publication Workflow (`.github/workflows/publish-google-play.yml`)**: Packages release AAB, signs it, and publishes directly to Google Play tracks (`internal`, `alpha`, `beta`, `production`).
+- **CI Pipeline (`.github/workflows/ci.yml`)**: Continuous build checks, unit tests, and debug APK artifact generation on pull requests and pushes.
+- **Detailed Deployment Guide**: See [`.github/DEPLOYMENT.md`](.github/DEPLOYMENT.md) for full setup instructions, secrets configuration, and Google Play API setup.
+
+## Development Logs & Documentation
+
+- [**Changelog**](CHANGELOG.md): Semantic version history and release notes.
+- [**Development Log Index**](DEVELOPMENT_LOG.md): Dated engineering decisions and technical milestones.
+- [**2026-10-05 Dev Log**](docs/development-logs/2026-10-05-github-actions-ci-cd-deployment.md): GitHub Actions CI/CD deployment & publication architecture.
+- [**2026-09-15 Dev Log**](docs/development-logs/2026-09-15-undo-redo-looper-engine.md): Looper engine undo and redo mechanism design.
+- [**2026-09-08 Dev Log**](docs/development-logs/2026-09-08-audio-record-dsp-pipeline-fixes.md): AudioRecord initialization and native DSP pipeline fixes.

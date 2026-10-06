@@ -20,9 +20,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.stompflow.ui.components.AudioSetupDialog
 import com.example.stompflow.ui.components.BottomNavigationBar
 import com.example.stompflow.ui.components.StudioTab
 import com.example.stompflow.ui.components.TopStudioBar
@@ -75,6 +79,9 @@ fun MainApp(
     val isLooperPlaying by viewModel.isLooperPlaying.collectAsStateWithLifecycle()
     val isAuditionPlaying by viewModel.isAuditionPlaying.collectAsStateWithLifecycle()
     val tunerState by viewModel.tunerState.collectAsStateWithLifecycle()
+    val audioSetupState by viewModel.audioSetupState.collectAsStateWithLifecycle()
+
+    var showAudioSetupDialog by remember { mutableStateOf(false) }
 
     // Permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -106,6 +113,10 @@ fun MainApp(
             TopStudioBar(
                 statusText = statusText,
                 isActiveAudio = isActiveAudio,
+                setupState = audioSetupState,
+                onSelectInput = { viewModel.selectInputDevice(it) },
+                onSelectOutput = { viewModel.selectOutputDevice(it) },
+                onOpenAudioSetup = { showAudioSetupDialog = true },
                 onPanicStop = { viewModel.panicStopAll() },
                 modifier = Modifier.padding(top = WindowInsets.systemBars.asPaddingValues().calculateTopPadding())
             )
@@ -215,6 +226,7 @@ fun MainApp(
                 )
                 StudioTab.OPTIONS -> OptionsScreen(
                     tunerState = tunerState,
+                    setupState = audioSetupState,
                     hasAudioPermission = hasAudioPermission,
                     onRequestAudioPermission = {
                         permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -222,11 +234,38 @@ fun MainApp(
                     onToggleTuner = {
                         viewModel.toggleTuner()
                     },
+                    onSelectInput = { viewModel.selectInputDevice(it) },
+                    onSelectOutput = { viewModel.selectOutputDevice(it) },
+                    onSelectEngine = { viewModel.selectDspEngine(it) },
+                    onToggleAudioConnect = { viewModel.toggleAudioConnection() },
+                    onSetEchoCancellation = { viewModel.setEchoCancellation(it) },
+                    onSetNoiseSuppression = { viewModel.setNoiseSuppression(it) },
+                    onSetAutoGainControl = { viewModel.setAutoGainControl(it) },
+                    onSetInputGainDb = { viewModel.setInputGainDb(it) },
+                    onSetOutputVolume = { viewModel.setOutputVolume(it) },
+                    onSetDirectMonitoring = { viewModel.setDirectMonitoring(it) },
                     onResetAllData = {
                         viewModel.resetAllData()
                     }
                 )
             }
         }
+    }
+
+    if (showAudioSetupDialog) {
+        AudioSetupDialog(
+            setupState = audioSetupState,
+            onSelectInput = { viewModel.selectInputDevice(it) },
+            onSelectOutput = { viewModel.selectOutputDevice(it) },
+            onSelectEngine = { viewModel.selectDspEngine(it) },
+            onToggleAudioConnect = { viewModel.toggleAudioConnection() },
+            onSetEchoCancellation = { viewModel.setEchoCancellation(it) },
+            onSetNoiseSuppression = { viewModel.setNoiseSuppression(it) },
+            onSetAutoGainControl = { viewModel.setAutoGainControl(it) },
+            onSetInputGainDb = { viewModel.setInputGainDb(it) },
+            onSetOutputVolume = { viewModel.setOutputVolume(it) },
+            onSetDirectMonitoring = { viewModel.setDirectMonitoring(it) },
+            onDismissRequest = { showAudioSetupDialog = false }
+        )
     }
 }
